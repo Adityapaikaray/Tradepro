@@ -60,6 +60,7 @@ import { VoiceAssistantProvider } from './contexts/VoiceAssistantContext.tsx';
 
 import { Stock } from './types.ts';
 import { analyticsService, analytics } from './services/analytics.ts';
+import { Analytics } from '@vercel/analytics/react';
 
 export default function AppWrapper() {
   return (
@@ -72,6 +73,7 @@ export default function AppWrapper() {
                 <NavigationProvider>
                   <VoiceAssistantProvider>
                     <AppContent />
+                    <Analytics />
                   </VoiceAssistantProvider>
                 </NavigationProvider>
               </PortfolioProvider>
