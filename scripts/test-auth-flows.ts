@@ -3,12 +3,20 @@
  * sending real verification or password-reset emails to the configured project.
  */
 
-import { mapAuthError, normalizeAuthEmail, validateAuthEmail } from '../src/services/supabase.ts';
+import { mapAuthError, normalizeAuthEmail, resolveAuthRedirectUrl, validateAuthEmail } from '../src/services/supabase.ts';
 
 const cases: Array<{ name: string; passed: boolean }> = [
   {
     name: 'Email input is trimmed and lowercased',
     passed: normalizeAuthEmail('  Trader@Example.com ') === 'trader@example.com',
+  },
+  {
+    name: 'Local password-reset links use the local app origin',
+    passed: resolveAuthRedirectUrl('http://localhost:3000') === 'http://localhost:3000/',
+  },
+  {
+    name: 'Production password-reset links use the active app origin',
+    passed: resolveAuthRedirectUrl('https://tradepro.ai.studio') === 'https://tradepro.ai.studio/',
   },
   {
     name: 'Email validation rejects an empty value',
@@ -35,8 +43,20 @@ const cases: Array<{ name: string; passed: boolean }> = [
     passed: mapAuthError({ message: 'over_email_send_rate_limit' }, 'send').includes('Too many attempts'),
   },
   {
-    name: 'Network failures produce a connection message',
-    passed: mapAuthError({ message: 'Failed to fetch' }, 'send').includes('Check your connection'),
+    name: 'Network failures identify the Supabase endpoint configuration to check',
+    passed: mapAuthError({ name: 'AuthRetryableFetchError', message: 'Failed to fetch' }, 'send').includes('VITE_SUPABASE_URL'),
+  },
+  {
+    name: 'Invalid public API keys point to the relevant project setting',
+    passed: mapAuthError({ code: 'invalid_api_key', message: 'Invalid API key' }, 'send').includes('Project Settings → API'),
+  },
+  {
+    name: 'Disallowed reset callbacks explain the redirect allow list',
+    passed: mapAuthError({ message: 'Invalid redirect URL: URL not allowed' }, 'send').includes('Redirect URLs'),
+  },
+  {
+    name: 'Email delivery failures point to SMTP configuration',
+    passed: mapAuthError({ message: 'Email address not authorized' }, 'send').includes('custom SMTP'),
   },
   {
     name: 'Password update failures explain the reset-link requirement',

@@ -5,8 +5,8 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
-import { isSupabaseConfigured, supabase } from '../lib/supabase.ts';
-import { mapAuthError, normalizeAuthEmail, validateAuthEmail } from '../services/supabase.ts';
+import { getSupabaseConfigurationError, isSupabaseConfigured, supabase } from '../lib/supabase.ts';
+import { mapAuthError, normalizeAuthEmail, resolveAuthRedirectUrl, validateAuthEmail } from '../services/supabase.ts';
 
 export interface User {
   id: string;
@@ -41,9 +41,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const getAuthRedirectUrl = (): string => {
-  const configuredUrl = import.meta.env.VITE_AUTH_REDIRECT_URL?.trim();
-  if (configuredUrl) return configuredUrl;
-  return typeof window !== 'undefined' ? window.location.origin : '';
+  const origin = typeof window !== 'undefined' ? window.location.origin : undefined;
+  return resolveAuthRedirectUrl(origin, import.meta.env.VITE_AUTH_REDIRECT_URL?.trim() || '');
 };
 
 const hasVerifiedEmail = (user: SupabaseUser | null | undefined): boolean =>
@@ -66,7 +65,8 @@ const toAppUser = (user: SupabaseUser | null | undefined): User | null => {
   };
 };
 
-const configurationError = 'Email authentication is not configured. Add the Supabase URL and publishable key to the app environment.';
+const configurationError = (): string => getSupabaseConfigurationError() ||
+  'Supabase email authentication is not configured for this deployment.';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
@@ -115,7 +115,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const emailError = validateAuthEmail(cleanEmail);
     if (emailError) return { success: false, error: emailError };
     if (!password) return { success: false, error: 'Enter a password to create your account.' };
-    if (!isSupabaseConfigured()) return { success: false, error: configurationError };
+    if (!isSupabaseConfigured()) return { success: false, error: configurationError() };
 
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -146,7 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const emailError = validateAuthEmail(cleanEmail);
     if (emailError) return { success: false, error: emailError };
     if (!password) return { success: false, error: 'Enter your password.' };
-    if (!isSupabaseConfigured()) return { success: false, error: configurationError };
+    if (!isSupabaseConfigured()) return { success: false, error: configurationError() };
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
@@ -177,7 +177,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanEmail = normalizeAuthEmail(email);
     const emailError = validateAuthEmail(cleanEmail);
     if (emailError) return { success: false, error: emailError };
-    if (!isSupabaseConfigured()) return { success: false, error: configurationError };
+    if (!isSupabaseConfigured()) return { success: false, error: configurationError() };
 
     try {
       const { error } = await supabase.auth.resend({
@@ -196,7 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanEmail = normalizeAuthEmail(email);
     const emailError = validateAuthEmail(cleanEmail);
     if (emailError) return { success: false, error: emailError };
-    if (!isSupabaseConfigured()) return { success: false, error: configurationError };
+    if (!isSupabaseConfigured()) return { success: false, error: configurationError() };
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
@@ -211,7 +211,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updatePassword = useCallback(async (password: string): Promise<AuthActionResult> => {
     if (!password) return { success: false, error: 'Enter a new password.' };
-    if (!isSupabaseConfigured()) return { success: false, error: configurationError };
+    if (!isSupabaseConfigured()) return { success: false, error: configurationError() };
     if (!isPasswordRecovery && !session) {
       return { success: false, error: 'This password reset link is no longer active. Request a new link and try again.' };
     }

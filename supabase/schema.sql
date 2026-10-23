@@ -1,10 +1,9 @@
 -- ==============================================================================
 -- TradePro Supabase Database Schema & Row Level Security (RLS)
--- Supabase Project: ccnkvydgdrvzxfygkfjm
--- URL: https://ccnkvydgdrvzxfygkfjm.supabase.co
+-- Run this schema in the SQL Editor for the active TradePro Supabase project.
 --
 -- Instructions:
--- 1. Open your Supabase Dashboard: https://supabase.com/dashboard/project/ccnkvydgdrvzxfygkfjm
+-- 1. Open the Supabase Dashboard for the project configured in VITE_SUPABASE_URL.
 -- 2. Navigate to "SQL Editor" -> "New Query"
 -- 3. Paste this script and click "Run"
 --
