@@ -7,11 +7,13 @@ import {
 import { useNavigation, RouteId } from '../contexts/NavigationContext.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { useTheme } from '../contexts/ThemeContext.tsx';
+import { useUI } from '../contexts/UIContext.tsx';
 
 const MobileMoreMenu: React.FC = () => {
   const { isMenuOpen, setMenuOpen, navigate, currentRoute } = useNavigation();
-  const { logout, openLoginModal } = useAuth();
+  const { logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { addToast } = useUI();
 
   const handleNavigate = (route: RouteId) => {
     navigate(route);
@@ -19,7 +21,9 @@ const MobileMoreMenu: React.FC = () => {
 
   const handleLogout = () => {
     setMenuOpen(false);
-    logout();
+    void logout().then(() => addToast('Signed out successfully', 'info')).catch(() => {
+      addToast('Could not sign out. Please try again.', 'info');
+    });
   };
 
   return (

@@ -46,6 +46,8 @@ import { UserTierProvider } from './contexts/UserTierContext.tsx';
 import { UIManager } from './components/UIManager.tsx';
 import AICopilot from './components/AICopilot.tsx';
 import { AuthProvider, useAuth } from './contexts/AuthContext.tsx';
+import AuthScreen from './components/AuthScreen.tsx';
+import { TradeProIcon } from './components/TradeProLogo.tsx';
 import { PortfolioProvider, usePortfolio } from './contexts/PortfolioContext.tsx';
 import { ThemeProvider } from './contexts/ThemeContext.tsx';
 import { MarketProvider } from './contexts/MarketContext.tsx';
@@ -87,6 +89,7 @@ import { useNavigation } from './contexts/NavigationContext.tsx';
 function AppContent() {
   const { marketContext } = usePortfolio();
   const { currentRoute, goBack, navigate, resetTo } = useNavigation();
+  const { isAuthenticated, loading: authLoading, isPasswordRecovery } = useAuth();
   const activeTab = currentRoute.id;
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -95,12 +98,12 @@ function AppContent() {
     analytics.init();
   }, []);
 
-  // Redirect legacy login/signup routes straight to dashboard
+  // Auth routes stay visible for signed-out users; signed-in users return to the app.
   useEffect(() => {
-    if (currentRoute.id === 'login' || currentRoute.id === 'signup') {
-      navigate('dashboard');
+    if (isAuthenticated && !isPasswordRecovery && (currentRoute.id === 'login' || currentRoute.id === 'signup')) {
+      resetTo('dashboard');
     }
-  }, [currentRoute.id, navigate]);
+  }, [currentRoute.id, isAuthenticated, isPasswordRecovery, resetTo]);
 
   useEffect(() => {
     const titles: Record<string, string> = {
@@ -246,6 +249,37 @@ function AppContent() {
         return <DashboardView onTrade={handleTrade} />;
     }
   };
+
+  const publicPages = [
+    'about', 'how-it-works', 'features', 'pricing', 'faq', 'contact',
+    'privacy', 'terms', 'ai-trading', 'ai-trading-tools',
+    'trading-risk-management', 'how-ai-trading-works',
+  ];
+  const isPublicPage = publicPages.includes(currentRoute.id);
+  const isAuthRoute = currentRoute.id === 'login' || currentRoute.id === 'signup';
+
+  if (!isPublicPage && authLoading) {
+    return (
+      <main className="min-h-screen bg-ui-bg text-text-main flex items-center justify-center px-6">
+        <div className="flex flex-col items-center gap-4 text-center" role="status" aria-live="polite">
+          <TradeProIcon size={48} />
+          <div className="h-1.5 w-40 overflow-hidden rounded-full bg-ui-border">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
+          </div>
+          <p className="text-sm text-text-muted">Restoring your secure session…</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!isPublicPage && (isAuthRoute || isPasswordRecovery || !isAuthenticated)) {
+    return (
+      <AuthScreen
+        initialMode={currentRoute.id === 'signup' ? 'sign-up' : 'sign-in'}
+        isPasswordRecovery={isPasswordRecovery}
+      />
+    );
+  }
 
   return (
     <>

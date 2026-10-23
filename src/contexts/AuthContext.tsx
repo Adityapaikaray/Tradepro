@@ -1,136 +1,253 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
- * TradePro Centralized User & Workspace Context
- * Authentication is completely bypassed - TradePro is open and immediately accessible.
  */
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { isSupabaseConfigured } from '../lib/supabase.ts';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
+import { isSupabaseConfigured, supabase } from '../lib/supabase.ts';
+import { mapAuthError, normalizeAuthEmail, validateAuthEmail } from '../services/supabase.ts';
 
 export interface User {
-  id?: string;
+  id: string;
   name: string;
-  email?: string;
-  displayName?: string;
-  accountNumber?: string;
-  kycStatus?: string;
-  tier?: string;
-  balance?: number;
-  emailVerified?: boolean;
+  email: string;
+  displayName: string;
+  emailVerified: boolean;
   createdAt?: number;
+}
+
+export interface AuthActionResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  requiresEmailVerification?: boolean;
 }
 
 interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
   loading: boolean;
-  isLoginModalOpen: boolean;
   isSupabaseActive: boolean;
-  redirectAfterLogin: string | null;
-  openLoginModal: (redirectRoute?: string) => void;
-  closeLoginModal: () => void;
-  setRedirectAfterLogin: (route: string | null) => void;
-  
-  sendEmailOtp: (email: string) => Promise<{ success: boolean; message?: string; error?: string }>;
-  verifyEmailOtp: (email: string, otp: string) => Promise<{ success: boolean; user?: User; error?: string }>;
-  resendEmailOtp: (email: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  isPasswordRecovery: boolean;
+  signUp: (email: string, password: string, fullName: string) => Promise<AuthActionResult>;
+  signIn: (email: string, password: string) => Promise<AuthActionResult>;
+  resendVerificationEmail: (email: string) => Promise<AuthActionResult>;
+  requestPasswordReset: (email: string) => Promise<AuthActionResult>;
+  updatePassword: (password: string) => Promise<AuthActionResult>;
   logout: () => Promise<void>;
-
-  sendOtp: (email: string) => Promise<{ success: boolean; message?: string; error?: string }>;
-  verifyOtp: (email: string, otp: string) => Promise<{ success: boolean; user?: User; error?: string }>;
-  resendOtp: (email: string) => Promise<{ success: boolean; message?: string; error?: string }>;
-  login: (token: string, user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const DEFAULT_USER: User = {
-  id: 'tradepro-trader-01',
-  name: 'TradePro Trader',
-  displayName: 'TradePro Trader',
-  email: 'trader@tradepro.com',
-  accountNumber: 'TP-8249-89',
-  kycStatus: 'VERIFIED',
-  tier: 'Pro Member',
-  balance: 100000,
-  emailVerified: true,
-  createdAt: Date.now()
+const getAuthRedirectUrl = (): string => {
+  const configuredUrl = import.meta.env.VITE_AUTH_REDIRECT_URL?.trim();
+  if (configuredUrl) return configuredUrl;
+  return typeof window !== 'undefined' ? window.location.origin : '';
 };
 
+const hasVerifiedEmail = (user: SupabaseUser | null | undefined): boolean =>
+  Boolean(user?.email_confirmed_at || user?.confirmed_at);
+
+const toAppUser = (user: SupabaseUser | null | undefined): User | null => {
+  if (!user?.email) return null;
+  const metadataName = user.user_metadata?.full_name || user.user_metadata?.name;
+  const displayName = typeof metadataName === 'string' && metadataName.trim()
+    ? metadataName.trim()
+    : user.email.split('@')[0];
+
+  return {
+    id: user.id,
+    name: displayName,
+    displayName,
+    email: user.email,
+    emailVerified: hasVerifiedEmail(user),
+    createdAt: user.created_at ? new Date(user.created_at).getTime() : undefined,
+  };
+};
+
+const configurationError = 'Email authentication is not configured. Add the Supabase URL and publishable key to the app environment.';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const authEventVersion = useRef(0);
   const isSupabaseActive = isSupabaseConfigured();
 
-  // Authentication is permanently active & bypassed
-  const [isAuthenticated] = useState<boolean>(true);
-  const [user, setUser] = useState<User>(() => {
+  useEffect(() => {
+    let isMounted = true;
+    const hasRecoveryCallback = typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery';
+    if (hasRecoveryCallback) setIsPasswordRecovery(true);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!isMounted) return;
+      authEventVersion.current += 1;
+      setSession(nextSession);
+      setLoading(false);
+
+      if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
+      if (event === 'SIGNED_OUT') setIsPasswordRecovery(false);
+    });
+
+    const initialEventVersion = authEventVersion.current;
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (!isMounted || authEventVersion.current !== initialEventVersion) return;
+      if (error) console.error('[Supabase Auth] Failed to restore session:', error.message);
+      setSession(data.session);
+      setLoading(false);
+    }).catch((error: unknown) => {
+      if (!isMounted) return;
+      console.error('[Supabase Auth] Failed to restore session:', error);
+      setSession(null);
+      setLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const signUp = useCallback(async (email: string, password: string, fullName: string): Promise<AuthActionResult> => {
+    const cleanEmail = normalizeAuthEmail(email);
+    const emailError = validateAuthEmail(cleanEmail);
+    if (emailError) return { success: false, error: emailError };
+    if (!password) return { success: false, error: 'Enter a password to create your account.' };
+    if (!isSupabaseConfigured()) return { success: false, error: configurationError };
+
     try {
-      const saved = localStorage.getItem('tradepro_current_user');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') return parsed;
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password,
+        options: {
+          data: { full_name: fullName.trim() },
+          emailRedirectTo: getAuthRedirectUrl(),
+        },
+      });
+      if (error) return { success: false, error: mapAuthError(error, 'signup') };
+
+      const emailVerified = hasVerifiedEmail(data.user);
+      return {
+        success: true,
+        requiresEmailVerification: !emailVerified,
+        message: emailVerified
+          ? 'Your account is ready.'
+          : 'Check your inbox for a confirmation link. You can sign in after you verify your email.',
+      };
+    } catch (error) {
+      return { success: false, error: mapAuthError(error, 'signup') };
+    }
+  }, []);
+
+  const signIn = useCallback(async (email: string, password: string): Promise<AuthActionResult> => {
+    const cleanEmail = normalizeAuthEmail(email);
+    const emailError = validateAuthEmail(cleanEmail);
+    if (emailError) return { success: false, error: emailError };
+    if (!password) return { success: false, error: 'Enter your password.' };
+    if (!isSupabaseConfigured()) return { success: false, error: configurationError };
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+      if (error) {
+        const requiresEmailVerification = error.code === 'email_not_confirmed' ||
+          error.message.toLowerCase().includes('email not confirmed');
+        return {
+          success: false,
+          requiresEmailVerification,
+          error: mapAuthError(error, 'signin'),
+        };
       }
-    } catch {}
-    return DEFAULT_USER;
-  });
-  const [loading] = useState<boolean>(false);
-  const [isLoginModalOpen] = useState<boolean>(false);
-  const [redirectAfterLogin, setRedirectAfterLogin] = useState<string | null>(null);
-
-  const openLoginModal = useCallback((_targetRedirect?: string) => {
-    // No-op: Authentication is bypassed
+      if (!hasVerifiedEmail(data.user)) {
+        await supabase.auth.signOut({ scope: 'local' });
+        return {
+          success: false,
+          requiresEmailVerification: true,
+          error: 'Verify your email address before signing in. You can resend the confirmation email below.',
+        };
+      }
+      return { success: true, message: 'Signed in successfully.' };
+    } catch (error) {
+      return { success: false, error: mapAuthError(error, 'signin') };
+    }
   }, []);
 
-  const closeLoginModal = useCallback(() => {
-    // No-op: Authentication is bypassed
+  const resendVerificationEmail = useCallback(async (email: string): Promise<AuthActionResult> => {
+    const cleanEmail = normalizeAuthEmail(email);
+    const emailError = validateAuthEmail(cleanEmail);
+    if (emailError) return { success: false, error: emailError };
+    if (!isSupabaseConfigured()) return { success: false, error: configurationError };
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: cleanEmail,
+        options: { emailRedirectTo: getAuthRedirectUrl() },
+      });
+      if (error) return { success: false, error: mapAuthError(error, 'send') };
+      return { success: true, message: 'If this address has a pending confirmation, a new email is on its way.' };
+    } catch (error) {
+      return { success: false, error: mapAuthError(error, 'send') };
+    }
   }, []);
 
-  // Safe dummy helpers ensuring backward compatibility without any network or auth calls
-  const sendEmailOtp = useCallback(async (_email: string) => {
-    return { success: true, message: 'Authentication bypassed.' };
+  const requestPasswordReset = useCallback(async (email: string): Promise<AuthActionResult> => {
+    const cleanEmail = normalizeAuthEmail(email);
+    const emailError = validateAuthEmail(cleanEmail);
+    if (emailError) return { success: false, error: emailError };
+    if (!isSupabaseConfigured()) return { success: false, error: configurationError };
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: getAuthRedirectUrl(),
+      });
+      if (error) return { success: false, error: mapAuthError(error, 'send') };
+      return { success: true, message: 'If an account exists for this address, you will receive a password reset link shortly.' };
+    } catch (error) {
+      return { success: false, error: mapAuthError(error, 'send') };
+    }
   }, []);
 
-  const verifyEmailOtp = useCallback(async (_email: string, _otp: string) => {
-    return { success: true, user };
-  }, [user]);
+  const updatePassword = useCallback(async (password: string): Promise<AuthActionResult> => {
+    if (!password) return { success: false, error: 'Enter a new password.' };
+    if (!isSupabaseConfigured()) return { success: false, error: configurationError };
+    if (!isPasswordRecovery && !session) {
+      return { success: false, error: 'This password reset link is no longer active. Request a new link and try again.' };
+    }
 
-  const resendEmailOtp = useCallback(async (_email: string) => {
-    return { success: true, message: 'Authentication bypassed.' };
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) return { success: false, error: mapAuthError(error, 'update') };
+      return { success: true, message: 'Your password has been updated. Sign in with your new password to continue.' };
+    } catch (error) {
+      return { success: false, error: mapAuthError(error, 'update') };
+    }
+  }, [isPasswordRecovery, session]);
+
+  const logout = useCallback(async (): Promise<void> => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+    setSession(null);
+    setIsPasswordRecovery(false);
   }, []);
 
-  const logout = useCallback(async () => {
-    setUser(DEFAULT_USER);
-  }, []);
-
-  const sendOtp = useCallback((email: string) => sendEmailOtp(email), [sendEmailOtp]);
-  const verifyOtp = useCallback((email: string, otp: string) => verifyEmailOtp(email, otp), [verifyEmailOtp]);
-  const resendOtp = useCallback((email: string) => resendEmailOtp(email), [resendEmailOtp]);
-
-  const login = useCallback((_token: string, userData: User) => {
-    localStorage.setItem('tradepro_current_user', JSON.stringify(userData));
-    setUser(userData);
-  }, []);
+  const user = toAppUser(session?.user);
+  const isAuthenticated = Boolean(session?.user && hasVerifiedEmail(session.user));
 
   return (
     <AuthContext.Provider value={{
       isAuthenticated,
       user,
       loading,
-      isLoginModalOpen,
       isSupabaseActive,
-      redirectAfterLogin,
-      openLoginModal,
-      closeLoginModal,
-      setRedirectAfterLogin,
-      sendEmailOtp,
-      verifyEmailOtp,
-      resendEmailOtp,
+      isPasswordRecovery,
+      signUp,
+      signIn,
+      resendVerificationEmail,
+      requestPasswordReset,
+      updatePassword,
       logout,
-      sendOtp,
-      verifyOtp,
-      resendOtp,
-      login
     }}>
       {children}
     </AuthContext.Provider>

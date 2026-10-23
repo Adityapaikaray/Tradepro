@@ -23,7 +23,7 @@ interface TopBarProps {
 }
 
 const TopBar: React.FC<TopBarProps> = ({ onSearchFocus, onNavigate }) => {
-  const { user, logout, isAuthenticated, openLoginModal } = useAuth();
+  const { user, logout } = useAuth();
   const { addToast, toggleMobileMenu, openModal } = useUI();
   const { theme, toggleTheme } = useTheme();
   const { isMax, toggleTier } = useUserTier();
@@ -461,12 +461,12 @@ const TopBar: React.FC<TopBarProps> = ({ onSearchFocus, onNavigate }) => {
           >
             <div className="w-10 h-10 rounded-full bg-ui-bg border border-primary shadow-primary/20 transition-transform hover:scale-105 duration-300 flex items-center justify-center">
               <div className="w-full h-full rounded-full flex items-center justify-center text-text-main font-black uppercase text-xs">
-                {user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : 'PU'}
+                {user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : 'TP'}
               </div>
             </div>
             <div className="hidden sm:flex flex-col items-start mr-1">
-              <p className="text-[13px] font-bold text-text-main leading-tight group-hover:text-primary transition-colors">{user?.name || "Prestige User"}</p>
-              <p className="text-[9px] font-black text-primary uppercase tracking-widest leading-none mt-0.5">{user?.tier || "PAPER TRADER"}</p>
+              <p className="text-[13px] font-bold text-text-main leading-tight group-hover:text-primary transition-colors">{user?.name || 'Trader'}</p>
+              <p className="text-[9px] font-black text-primary uppercase tracking-widest leading-none mt-0.5">Paper Trading</p>
             </div>
           </div>
           <AnimatePresence>
@@ -480,13 +480,14 @@ const TopBar: React.FC<TopBarProps> = ({ onSearchFocus, onNavigate }) => {
               >
                 <div className="px-4 py-3 mb-1 border-b border-ui-border">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-bold text-text-main truncate">{user?.name || "TradePro User"}</p>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/10 text-emerald-400 flex items-center gap-1 shrink-0">
-                      <ShieldCheck size={11} /> Verified
-                    </span>
+                    <p className="text-sm font-bold text-text-main truncate">{user?.name || 'Trader'}</p>
+                    {user?.emailVerified && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/10 text-emerald-400 flex items-center gap-1 shrink-0">
+                        <ShieldCheck size={11} /> Email verified
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs text-text-muted font-mono truncate mt-0.5">{user?.email || "trader@tradepro.com"}</p>
-                  <p className="text-[10px] text-primary font-bold uppercase tracking-wider mt-1">{user?.tier || "Pro Member"}</p>
+                  <p className="text-xs text-text-muted font-mono truncate mt-0.5">{user?.email}</p>
                 </div>
                 
                 <button onClick={() => { setProfileOpen(false); navigate('settings'); }} className="w-full text-left px-4 py-2 text-sm text-text-muted hover:text-text-main hover:bg-ui-surface-hover transition-colors flex items-center gap-3 cursor-pointer">
@@ -498,7 +499,15 @@ const TopBar: React.FC<TopBarProps> = ({ onSearchFocus, onNavigate }) => {
                 
                 <div className="h-px bg-ui-border my-2" />
                 
-                <button onClick={() => { setProfileOpen(false); logout(); addToast('Session refreshed', 'info'); }} className="w-full text-left px-4 py-2 text-sm text-negative hover:bg-negative/10 transition-colors flex items-center gap-3 cursor-pointer">
+                <button onClick={async () => {
+                  setProfileOpen(false);
+                  try {
+                    await logout();
+                    addToast('Signed out successfully', 'info');
+                  } catch {
+                    addToast('Could not sign out. Please try again.', 'info');
+                  }
+                }} className="w-full text-left px-4 py-2 text-sm text-negative hover:bg-negative/10 transition-colors flex items-center gap-3 cursor-pointer">
                   <LogOut size={16} /> Reset Profile
                 </button>
               </motion.div>
