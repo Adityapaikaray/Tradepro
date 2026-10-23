@@ -5,17 +5,17 @@ import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
-  const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || '';
-  const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '';
+  const supabaseUrl = env.VITE_SUPABASE_URL || '';
+  const supabasePublishableKey = env.VITE_SUPABASE_PUBLISHABLE_KEY || env.VITE_SUPABASE_ANON_KEY || '';
   return {
     plugins: [react(), tailwindcss()],
-    envPrefix: ['VITE_', 'SUPABASE_'],
+    // Keep unprefixed SUPABASE_* server credentials out of import.meta.env.
+    envPrefix: 'VITE_',
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.SUPABASE_URL': JSON.stringify(supabaseUrl),
-      'process.env.SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
       'process.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
-      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
+      'process.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(supabasePublishableKey),
+      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabasePublishableKey),
     },
     resolve: {
       alias: {

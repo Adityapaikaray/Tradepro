@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { FormEvent, useEffect, useState } from 'react';
+import React, { FormEvent, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, Moon, ShieldCheck, Sun, UserRound } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.tsx';
+import { getSupabaseConfigurationError } from '../lib/supabase.ts';
 import { useNavigation } from '../contexts/NavigationContext.tsx';
 import { useTheme } from '../contexts/ThemeContext.tsx';
 import { TradeProIcon } from './TradeProLogo.tsx';
@@ -41,6 +42,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialMode = 'sign-in',
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [passwordUpdated, setPasswordUpdated] = useState(false);
+  const actionInProgress = useRef(false);
 
   useEffect(() => {
     if (isPasswordRecovery && !passwordUpdated) setMode('reset-password');
@@ -75,6 +77,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialMode = 'sign-in',
   };
 
   const runAction = async (action: () => Promise<void>) => {
+    if (actionInProgress.current) return;
+    actionInProgress.current = true;
     setError('');
     setNotice('');
     setIsBusy(true);
@@ -83,6 +87,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialMode = 'sign-in',
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Something went wrong. Please try again.');
     } finally {
+      actionInProgress.current = false;
       setIsBusy(false);
     }
   };
@@ -237,7 +242,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialMode = 'sign-in',
 
           {!isSupabaseActive && (
             <div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm leading-5 text-amber-700 dark:text-amber-300" role="status">
-              Email sign-in is unavailable until the Supabase URL and publishable key are configured for this deployment.
+              {getSupabaseConfigurationError() || 'Email sign-in is unavailable until Supabase is configured for this deployment.'}
             </div>
           )}
 

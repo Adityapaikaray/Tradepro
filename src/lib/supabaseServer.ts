@@ -10,14 +10,7 @@
 import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import type { Request, Response } from 'express';
-import { 
-  supabaseUrl, 
-  supabaseAnonKey, 
-  SUPABASE_PROJECT_REF, 
-  SUPABASE_CANONICAL_URL 
-} from './supabase.ts';
-
-export { SUPABASE_PROJECT_REF, SUPABASE_CANONICAL_URL };
+import { supabaseUrl, supabaseAnonKey } from './supabase.ts';
 
 /**
  * Creates a server-side Supabase client bound to Express req / res cookies.
