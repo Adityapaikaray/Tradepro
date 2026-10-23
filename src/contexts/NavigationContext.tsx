@@ -72,7 +72,7 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.replace(/^\//, '').toLowerCase();
       if (path === 'login' || path === 'signup') {
-        return [{ id: 'dashboard' }];
+        return [{ id: path as RouteId }];
       }
       if (path && (PUBLIC_ROUTES.includes(path) || ['dashboard', 'market', 'watchlist', 'portfolio', 'charts', 'ai-insights', 'options', 'futures', 'alerts', 'api', 'settings', 'wealth', 'heatmap', 'orders', 'transactions', 'help', 'analytics'].includes(path))) {
         return [{ id: path as RouteId }];
@@ -96,6 +96,9 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
        if (PUBLIC_ROUTES.includes(id)) {
          return 'public';
        }
+       if (id === 'login' || id === 'signup') {
+         return 'public';
+       }
        if (['orders', 'watchlist', 'alerts', 'transactions', 'settings', 'help', 'analytics', 'research', 'tools', 'news', 'heatmap', 'key-index'].includes(id)) {
          return 'more';
        }
@@ -106,11 +109,10 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
   const activeTab = deriveActiveTab(history);
 
   const navigate = useCallback((id: RouteId, params?: Record<string, any>) => {
-    const targetId = (id === 'login' || id === 'signup') ? 'dashboard' : id;
-    setHistory(prev => [...prev, { id: targetId, params }]);
+    setHistory(prev => [...prev, { id, params }]);
     setMenuOpen(false);
     if (typeof window !== 'undefined') {
-      const targetUrl = targetId === 'dashboard' ? '/' : `/${targetId}`;
+      const targetUrl = id === 'dashboard' ? '/' : `/${id}`;
       if (window.location.pathname !== targetUrl) {
         window.history.pushState(null, '', targetUrl);
       }
@@ -135,6 +137,10 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
   const resetTo = useCallback((id: RouteId, params?: Record<string, any>) => {
     setHistory([{ id, params }]);
     setMenuOpen(false);
+    if (typeof window !== 'undefined') {
+      const targetUrl = id === 'dashboard' ? '/' : `/${id}`;
+      if (window.location.pathname !== targetUrl) window.history.replaceState(null, '', targetUrl);
+    }
   }, []);
 
   return (

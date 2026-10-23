@@ -51,7 +51,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onTrade, onNavigate }) =>
   const isIndia = marketContext === 'IN';
   const currencySymbol = isIndia ? '₹' : '$';
   const { stocks } = useMarketData();
-  const userName = user?.name && user.name !== 'Guest User' && user.name !== 'Prestige User' ? user.name : 'Aditya';
+  const userName = user?.name?.trim() || 'Trader';
   
   const { stocksMap } = useMemo(() => {
     const map = new Map<string, Stock>();

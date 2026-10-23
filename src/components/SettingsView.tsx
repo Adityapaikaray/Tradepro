@@ -20,7 +20,7 @@ type SettingsTab = 'general' | 'demo-portfolio' | 'preferences' | 'notifications
 
 const SettingsView: React.FC = () => {
   const { profile, resetAccount, marketContext, setMarketContext, summary } = usePortfolio();
-  const { user, openLoginModal, logout, isAuthenticated } = useAuth();
+  const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { addToast, openModal } = useUI();
   const { stocks } = useMarketData();
@@ -135,11 +135,11 @@ const SettingsView: React.FC = () => {
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-primary-light flex items-center justify-center text-ui-bg font-black uppercase text-xl shadow-md shrink-0">
-                    {user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : 'PU'}
+                    {user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : 'TP'}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-base font-bold text-text-main leading-tight">{user?.name || "Prestige User"}</p>
-                    <p className="text-xs text-text-muted mt-0.5 font-mono">{user?.email || "adityapaikaray31@gmail.com"} &middot; {user?.tier || "Prestige Member"}</p>
+                    <p className="text-base font-bold text-text-main leading-tight">{user?.name || 'Trader'}</p>
+                    <p className="text-xs text-text-muted mt-0.5 font-mono">{user?.email || 'Signed-in account'}</p>
                     <div className="flex items-center gap-2 mt-2">
                       <span className="px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold uppercase tracking-wider">
                         Virtual Account Active
@@ -157,7 +157,14 @@ const SettingsView: React.FC = () => {
                       Sync Profile
                     </button>
                     <button 
-                      onClick={() => { logout(); addToast('Logged out successfully', 'info'); }}
+                      onClick={async () => {
+                        try {
+                          await logout();
+                          addToast('Signed out successfully', 'info');
+                        } catch {
+                          addToast('Could not sign out. Please try again.', 'info');
+                        }
+                      }}
                       className="px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-bold rounded-xl hover:bg-rose-500/20 transition-colors shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <LogOut size={13} />
